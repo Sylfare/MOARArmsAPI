@@ -806,7 +806,7 @@ events.RENDER:register(function(delta, mode)
 
 
     --Arm swinging from walking
-    local walkrot
+    local walkRot
     if useLegRotForArmAnim then
         walkRot = vanilla_model.RIGHT_LEG:getOriginRot().x*0.7
 
