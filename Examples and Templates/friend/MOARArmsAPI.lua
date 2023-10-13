@@ -103,6 +103,33 @@ end)
 ---@field ChangeItem function
 local Arm = {}
 
+local Arms = {}
+
+--vars
+--math functions
+local sin = math.sin 
+local sqrt = math.sqrt
+local pi = math.pi
+--keys
+--local AtkKey = keybind:create("TEST", keybind:getVanillaKey("key.attack"))
+--local UseKey = keybind:create("TEST2", keybind:getVanillaKey("key.use"))
+--calculating players horizontal velocity
+local Velocity = 0 
+
+local Pos = vec(0,0,0)
+local OldPos = vec(0,0,0)
+
+
+--other vars
+local Adjdistance = 0
+local MainhandSlot = 0
+local MainhandArm = {}
+local UsedSlots = {}
+local isSneaking = false
+local Rot
+
+
+
 ---@alias ArmType
 ---| "LEFT"
 ---| "RIGHT"
@@ -122,7 +149,7 @@ local Arm = {}
 ---@param itemChoice ItemChoice Item to prioritise. "MAINHAND" and "OFFHAND" for vanilla hands, or a number representing a hotbar slot. (0 is leftmost slot, 8 for rightmost)
 function Arm:newArm(id, left_right, itemPivot, armModel, itemChoice, attackAnim)
     --setup arm vars
-    arm = {ID=id, LeftRight = left_right, ItemPivot = itemPivot, Model = armModel, ItemChoice = itemChoice, AttackAnim = attackAnim}
+    local arm = {ID=id, LeftRight = left_right, ItemPivot = itemPivot, Model = armModel, ItemChoice = itemChoice, AttackAnim = attackAnim}
     if type(itemChoice) == "number" then
         arm.ItemSlot = itemChoice
         table.insert(UsedSlots, itemChoice)
@@ -185,12 +212,10 @@ end
 vanilla_model.HELD_ITEMS:setVisible(false)
 
 
-function player_init() 
-    Pos = player:getPos() 
-    OldPos = player:getPos()
-    needInit = false
-end
-events.ENTITY_INIT:register(player_init)
+events.ENTITY_INIT:register(function ()
+    local Pos = player:getPos() 
+    local OldPos = player:getPos()
+end)
 
 
 --Auto update for players first loading avatar
@@ -229,27 +254,7 @@ events.TICK:register(function()
   
 end)
 
---math functions
-local sin = math.sin 
-local sqrt = math.sqrt
-local pi = math.pi
---keys
---local AtkKey = keybind:create("TEST", keybind:getVanillaKey("key.attack"))
---local UseKey = keybind:create("TEST2", keybind:getVanillaKey("key.use"))
---calculating players horizontal velocity
-local Velocity = 0 
 
-local Pos = vec(0,0,0)
-local OldPos = vec(0,0,0)
---Arm groups
-
-Arms = {}
---other vars
-local Adjdistance = 0
-local MainhandSlot = 0
-local MainhandArm = {}
-UsedSlots = {}
-local isSneaking = false
 
 
 
@@ -322,7 +327,7 @@ local function compareItem(check, item) -- checks whether table 'item' contains 
     end
     return true --if no mismatch found, true.
 end
-function getOverride()
+local function getOverride()
     OverrideisAimed = false
     OverrideisInverted = player:isLeftHanded()
     if player:getPose() == "SWIMMING" then
@@ -330,9 +335,9 @@ function getOverride()
         OverrideNum = -1
         return
     end
-    MainhandItem = player:getHeldItem()
-    OffhandItem = player:getHeldItem(true)
-    ActiveItem = player:getActiveItem()
+    local MainhandItem = player:getHeldItem()
+    local OffhandItem = player:getHeldItem(true)
+    local ActiveItem = player:getActiveItem()
     for _, item in ipairs(ItemOverrides.TwoHandUse) do
         if compareItem(item, ActiveItem) then --active item needs override
             OverrideVal = "BOTH"
@@ -585,7 +590,7 @@ local NBTWhitelist = {
 
     --block entity stuff 
     -- many modded item's BlockEntityTags seem to break my script for some reason...
-    --BlockEntityTag = "ANY",
+    BlockEntityTag = "ANY",
 
 
     --modded
@@ -614,7 +619,7 @@ end
 
 local next = next
 local function tagToStackString(tag, output) --converts a tag value to a string. Like the ItemStack function, but for any table. 
-    comma = false
+    local comma = false
     if next(tag) == nil then --empty list
         output[1] = output[1] .. "[],"
     elseif tag[1] then --is a list
@@ -669,10 +674,9 @@ local function stripItem(item) -- strip all nbt from "item" that isn't included 
     if next(item.tag) == nil then return item:toStackString() end --item has no tags, no need to strip what doesn't exist 
     output = {}
     _stripItem(NBTWhitelist, item.tag, output)
-    stackString = {item:getID(), false} --(Why is an ItemStack's tag read-only? WHYYYYYY) (also this code is jank, and i think might contain unneeded leftovers from previous attempts at it)
+    local stackString = {item:getID(), false} --(Why is an ItemStack's tag read-only? WHYYYYYY) (also this code is jank, and i think might contain unneeded leftovers from previous attempts at it)
     tagToStackString(output, stackString)
-    result = stackString[1]
-    return result
+    return stackString[1]
 end
 
 
@@ -700,7 +704,6 @@ events.TICK:register(function()
     
     
     
-    --if needInit then pings.getArmData() end
 
     --calculate velocity, use it for arm swinging anim
     if not useLegRotForArmAnim then
@@ -748,7 +751,7 @@ events.TICK:register(function()
             end  
         end
         if arm.ItemSlot and host:isHost() then
-            item = stripItem(host:getSlot(arm.ItemSlot))
+            local item = stripItem(host:getSlot(arm.ItemSlot))
             if arm.Item ~= item then
                 pings.updateArm(k, item)
 
@@ -824,7 +827,7 @@ events.RENDER:register(function(delta, mode)
     --log(OverrideisInverted)
 
     for _, arm in pairs(Arms) do
-        ArmRot = vec(0,0,0)
+        local ArmRot = vec(0,0,0)
 
 
         
@@ -845,7 +848,7 @@ events.RENDER:register(function(delta, mode)
         if arm.isOverridden then
             
 
-            VanillaRot = {0,0}
+            local VanillaRot = {0,0}
             if arm.LeftRight == "LEFT" then
                 if OverrideisInverted then
                     VanillaRot = vanilla_model.RIGHT_ARM:getOriginRot()
@@ -969,4 +972,4 @@ end)
 
 
 
-return Arm
+return Arm, Arms

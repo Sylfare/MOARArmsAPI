@@ -41,3 +41,7 @@ Arms can also be saved to a variable, allowing access to some of its values, suc
 Messing with the variables will likely cause problems
 
     ExtraArm = Arm:newArm(2, "RIGHT", models.model.SecondRightArm.SecondRightItem, models.model.SecondRightArm, 1)
+
+The table storing all the arms can also be accessed as a second variable returned by the script, done like so:
+
+    Arm, ArmTable = require("MOARArmsAPI")
