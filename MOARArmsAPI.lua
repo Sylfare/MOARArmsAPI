@@ -75,8 +75,10 @@ local useLegRotForArmAnim = true
 
 local MainhandVanillaArm = nil
 local OffhandVanillaArm = nil
+local isLeftHanded = false
 events.ENTITY_INIT:register(function ()
     if player:isLeftHanded() then
+        isLeftHanded = true
         OffhandVanillaArm = vanilla_model.RIGHT_ARM
         MainhandVanillaArm = vanilla_model.LEFT_ARM
     else
@@ -93,7 +95,8 @@ end)
 ---@field Model ModelPart
 ---@field ItemModel ModelPart
 ---@field ItemChoice ItemChoice
----@field AttackAnim Animation
+---@field AnimOptions table
+---@field CustomAnims table
 ---@field isSwinging boolean --true if arm is swinging
 ---@field SwingTime number --used for swing anim
 ---@field SwingType "ATTACK"|"USE"|"DROP" --type of swing. Mainly for custom anims.
@@ -126,7 +129,6 @@ local OldPos = vec(0,0,0)
 --other vars
 local Adjdistance = 0
 local MainhandSlot = 0
-local MainhandArm = {}
 local UsedSlots = {}
 local isSneaking = false
 local Rot
@@ -150,9 +152,21 @@ local Rot
 ---@param itemPivot ModelPart ModelPart of the Held Item
 ---@param armModel ModelPart | nil ModelPart of the arm itself. Will remove vanilla RightArm and LeftArm parenting from the part if present, to replace with custom anims. nil value means no rotations applied (e.g fully custom anims)
 ---@param itemChoice ItemChoice Item to prioritise. "MAINHAND" and "OFFHAND" for vanilla hands, or a number representing a hotbar slot. (0 is leftmost slot, 8 for rightmost)
-function Arm:newArm(id, left_right, itemPivot, armModel, itemChoice, attackAnim)
+---@param animOptions Table Table containing info on which API anims to use. each anim is a key: IDLE,WALK,SWING,ATTACK,USE,DROP,OVERRIDE,OVERRIDE_AIM. Value determines whether to use anim: 0 - anim off, 1 - anim off if custom anim playing, 2 - anim always on
+---@param customAnims Table Table containing all custom anims, with play conditions
+function Arm:newArm(id, left_right, itemPivot, armModel, itemChoice, animOptions, customAnims)
     --setup arm vars
-    local arm = {ID=id, LeftRight = left_right, ItemPivot = itemPivot, Model = armModel, ItemChoice = itemChoice, AttackAnim = attackAnim}
+    local arm = {ID=id, LeftRight = left_right, ItemPivot = itemPivot, Model = armModel, ItemChoice = itemChoice, AnimOptions = animOptions, CustomAnims = customAnims}
+    local animOptionlist = {"IDLE","WALK","SWING","OVERRIDE"}
+    local hasModel
+    if armModel then hasModel = 1 else hasModel = 0 end
+
+    if not arm.AnimOptions then arm.AnimOptions = {} end
+    for _, value in ipairs(animOptionlist) do --fill in required data in AnimOptions
+        if not arm.AnimOptions[value] then arm.AnimOptions[value] = hasModel end
+    end
+    if not arm.CustomAnims then arm.CustomAnims = {} end
+
     if type(itemChoice) == "number" then
         arm.ItemSlot = itemChoice
         table.insert(UsedSlots, itemChoice)
@@ -836,6 +850,18 @@ events.RENDER:register(function(delta, mode)
     --Idle swinging
     local idleRotX = (sin(math.rad(world.getTime(delta)*18/5))*3)
     local idleRotZ = (sin(math.rad(world.getTime(delta)*18/4))*3+3)
+    local isMounted = player:getVehicle() ~= nil
+    local RightArmOriginRot = vanilla_model.RIGHT_ARM:getOriginRot()
+    local LeftArmOriginRot = vanilla_model.LEFT_ARM:getOriginRot()
+    local MainHandOriginRot
+    local OffHandOriginRot
+    if isLeftHanded then
+        MainHandOriginRot = LeftArmOriginRot
+        OffHandOriginRot = RightArmOriginRot
+    else
+        OffHandOriginRot = LeftArmOriginRot
+        MainHandOriginRot = RightArmOriginRot
+    end
 
     --log(OverrideNum)
     --log(OverrideVal)
@@ -867,50 +893,26 @@ events.RENDER:register(function(delta, mode)
             local VanillaRot = {0,0}
             if arm.LeftRight == "LEFT" then
                 if OverrideisInverted then
-                    VanillaRot = vanilla_model.RIGHT_ARM:getOriginRot()
+                    VanillaRot = RightArmOriginRot
                     VanillaRot.y = -VanillaRot.y
                     if OverrideisAimed then
                         VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
                     end
                 else
-                    VanillaRot = vanilla_model.LEFT_ARM:getOriginRot()
+                    VanillaRot = LeftArmOriginRot
                 end
             else
                 if OverrideisInverted then
-                    VanillaRot = vanilla_model.LEFT_ARM:getOriginRot()
+                    VanillaRot = LeftArmOriginRot
                     VanillaRot.y = -VanillaRot.y
                     if OverrideisAimed then
                         VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
                     end
                 else
-                    VanillaRot = vanilla_model.RIGHT_ARM:getOriginRot()
+                    VanillaRot = RightArmOriginRot
                 end
             end
 
-
-            --[[VanillaRot = {0,0}
-            if arm.LeftRight == "LEFT" then
-                
-                if OverrideVal == "ALL" or OverrideVal == "BOTH" then --override involves both arms
-                    VanillaRot = OffhandVanillaArm:getOriginRot()
-                elseif arm.ItemChoice ~= "OFFHAND" then --single arm, but other side
-                    VanillaRot = MainhandVanillaArm:getOriginRot()
-                    VanillaRot.y = -VanillaRot.y
-                else
-                    VanillaRot = OffhandVanillaArm:getOriginRot()
-                end
-                
-            else
-                if OverrideVal == "ALL" or OverrideVal == "BOTH" then
-                    VanillaRot = MainhandVanillaArm:getOriginRot()
-                elseif arm.ItemChoice == "OFFHAND" then
-                    VanillaRot = OffhandVanillaArm:getOriginRot()
-                    VanillaRot.y = -VanillaRot.y
-                else
-                    VanillaRot = MainhandVanillaArm:getOriginRot()
-                end
-
-            end]]
 
             ArmRot = VanillaRot
             if isSneaking and arm.Model then --sneaking
@@ -923,7 +925,8 @@ events.RENDER:register(function(delta, mode)
         else
 
             if arm.ItemSlot == MainhandSlot and OverrideVal ~= "BOTH" and not arm.isSwinging then --Detect arm atk/use swinging
-                if 12 < MainhandVanillaArm:getOriginRot().y or MainhandVanillaArm:getOriginRot().y < -12 then
+                
+                if 12 < MainHandOriginRot.y or MainHandOriginRot.y < -12 then
                     arm.isSwinging = true
                     if AtkTicker > 0 then arm.SwingType = "ATTACK"
                     elseif UseTicker > 0 then arm.SwingType = "USE"
@@ -933,7 +936,7 @@ events.RENDER:register(function(delta, mode)
             end
 
             if arm.ItemChoice == "OFFHAND" and OverrideVal ~= "BOTH" and not arm.isSwinging then
-                if 12 < OffhandVanillaArm:getOriginRot().y or OffhandVanillaArm:getOriginRot().y < -12 then
+                if 12 < OffHandOriginRot.y or OffHandOriginRot.y < -12 then
                     arm.isSwinging = true
                     if AtkTicker > 0 then arm.SwingType = "ATTACK"
                     elseif UseTicker > 0 then arm.SwingType = "USE"
@@ -943,7 +946,7 @@ events.RENDER:register(function(delta, mode)
             end
 
 
-            if player:getVehicle() then --riding
+            if isMounted then --riding
                 ArmRot:add(40)
             else
                 if arm.ID % 2 == 0 then Rot = -walkRot else Rot = walkRot end --walking
