@@ -94,8 +94,8 @@ end)
 ---@field ItemModel ModelPart
 ---@field ItemChoice ItemChoice
 ---@field AttackAnim
----@field isAttacking boolean
----@field AtkTime number
+---@field isSwinging boolean
+---@field SwingTime number
 ---@field ItemSlot integer
 ---@field Item string
 ---@field ItemRender ItemTask
@@ -154,7 +154,7 @@ function Arm:newArm(id, left_right, itemPivot, armModel, itemChoice, attackAnim)
         arm.ItemSlot = itemChoice
         table.insert(UsedSlots, itemChoice)
     end
-    arm.AtkTime = 0
+    arm.SwingTime = 0
 
     
     table.insert(Arms, arm)
@@ -737,16 +737,16 @@ events.TICK:register(function()
     
     --Arm atk/use swing anim, and update held item model
     for k, arm in pairs(Arms) do 
-        if arm.isAttacking then --Attack anim ticker
-            if arm.AtkTime < 1 and OverrideVal ~= "NONE" then
-                arm.isAttacking = false
-                arm.AtkTime = 0
+        if arm.isSwinging then --Attack anim ticker
+            if arm.SwingTime < 1 and OverrideVal ~= "NONE" then
+                arm.isSwinging = false
+                arm.SwingTime = 0
             else
-                arm.AtkTime = arm.AtkTime + 1
+                arm.SwingTime = arm.SwingTime + 1
                 --TBA: when making customizable attack anim functions, move this there
-                if arm.AtkTime == 6 then
-                    arm.AtkTime = 0
-                    arm.isAttacking = false
+                if arm.SwingTime == 6 then
+                    arm.SwingTime = 0
+                    arm.isSwinging = false
                 end 
             end  
         end
@@ -908,13 +908,13 @@ events.RENDER:register(function(delta, mode)
 
             if arm.ItemSlot == MainhandSlot and OverrideVal ~= "BOTH" then --Detect arm atk/use swinging
                 if 12 < MainhandVanillaArm:getOriginRot().y or MainhandVanillaArm:getOriginRot().y < -12 then
-                    arm.isAttacking = true
+                    arm.isSwinging = true
                 end
             end
 
             if arm.ItemChoice == "OFFHAND" and OverrideVal ~= "BOTH" then
                 if 12 < OffhandVanillaArm:getOriginRot().y or OffhandVanillaArm:getOriginRot().y < -12 then
-                    arm.isAttacking = true
+                    arm.isSwinging = true
                 end
             end
 
@@ -939,16 +939,16 @@ events.RENDER:register(function(delta, mode)
                 end
                 
             end
-            if arm.isAttacking then --attacking
+            if arm.isSwinging then --attacking
 
                 --TBA: make this a separate, customizable func. call
                 if arm.AttackAnim then
                     arm.AttackAnim:play() --play anim instead of swinging
                 else
                     if arm.LeftRight == "RIGHT" then
-                        ArmRot:add(sin((arm.AtkTime+delta)/6*pi)*80, -sin((arm.AtkTime+delta)/3*pi)*20+10, 0)
+                        ArmRot:add(sin((arm.SwingTime+delta)/6*pi)*80, -sin((arm.SwingTime+delta)/3*pi)*20+10, 0)
                     else
-                        ArmRot:add(sin((arm.AtkTime+delta)/6*pi)*80, sin((arm.AtkTime+delta)/3*pi)*20-10, 0)
+                        ArmRot:add(sin((arm.SwingTime+delta)/6*pi)*80, sin((arm.SwingTime+delta)/3*pi)*20-10, 0)
                     end
                 end
             end
