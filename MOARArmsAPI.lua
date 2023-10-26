@@ -93,9 +93,10 @@ end)
 ---@field Model ModelPart
 ---@field ItemModel ModelPart
 ---@field ItemChoice ItemChoice
----@field AttackAnim
----@field isSwinging boolean
----@field SwingTime number
+---@field AttackAnim Animation
+---@field isSwinging boolean --true if arm is swinging
+---@field SwingTime number --used for swing anim
+---@field SwingType "ATTACK"|"USE"|"DROP" --type of swing. Mainly for custom anims.
 ---@field ItemSlot integer
 ---@field Item string
 ---@field ItemRender ItemTask
@@ -111,8 +112,10 @@ local sin = math.sin
 local sqrt = math.sqrt
 local pi = math.pi
 --keys
---local AtkKey = keybind:create("TEST", keybind:getVanillaKey("key.attack"))
---local UseKey = keybind:create("TEST2", keybind:getVanillaKey("key.use"))
+local AtkKey = keybinds:fromVanilla("key.attack")
+local UseKey = keybinds:fromVanilla("key.use")
+local AtkTicker = 0
+local UseTicker = 0
 --calculating players horizontal velocity
 local Velocity = 0 
 
@@ -213,8 +216,8 @@ vanilla_model.HELD_ITEMS:setVisible(false)
 
 
 events.ENTITY_INIT:register(function ()
-    local Pos = player:getPos() 
-    local OldPos = player:getPos()
+    Pos = player:getPos() 
+    OldPos = player:getPos()
 end)
 
 
@@ -729,10 +732,21 @@ events.TICK:register(function()
         end
     end
 
-    --Arm overrides
-    getOverride()
-
     
+
+    --Attack/Use keypress detection
+    if AtkKey:isPressed() then
+        AtkTicker = 3
+        UseTicker = 0
+    elseif AtkTicker > 0 then
+        AtkTicker = AtkTicker - 1
+    end
+    if UseKey:isPressed() then
+        UseTicker = 3
+        AtkTicker = 0
+    elseif UseTicker > 0 then
+        UseTicker = UseTicker - 1
+    end
 
     
     --Arm atk/use swing anim, and update held item model
@@ -772,6 +786,8 @@ end)
 
 events.RENDER:register(function(delta, mode)
 
+    --Arm overrides
+    getOverride()
     
     --first person stuff
     if mode == "FIRST_PERSON" then
@@ -906,15 +922,23 @@ events.RENDER:register(function(delta, mode)
 
         else
 
-            if arm.ItemSlot == MainhandSlot and OverrideVal ~= "BOTH" then --Detect arm atk/use swinging
+            if arm.ItemSlot == MainhandSlot and OverrideVal ~= "BOTH" and not arm.isSwinging then --Detect arm atk/use swinging
                 if 12 < MainhandVanillaArm:getOriginRot().y or MainhandVanillaArm:getOriginRot().y < -12 then
                     arm.isSwinging = true
+                    if AtkTicker > 0 then arm.SwingType = "ATTACK"
+                    elseif UseTicker > 0 then arm.SwingType = "USE"
+                    else arm.SwingType = "DROP" end
+                    log(arm.SwingType)
                 end
             end
 
-            if arm.ItemChoice == "OFFHAND" and OverrideVal ~= "BOTH" then
+            if arm.ItemChoice == "OFFHAND" and OverrideVal ~= "BOTH" and not arm.isSwinging then
                 if 12 < OffhandVanillaArm:getOriginRot().y or OffhandVanillaArm:getOriginRot().y < -12 then
                     arm.isSwinging = true
+                    if AtkTicker > 0 then arm.SwingType = "ATTACK"
+                    elseif UseTicker > 0 then arm.SwingType = "USE"
+                    else arm.SwingType = "DROP" end
+                    log(arm.SwingType)
                 end
             end
 
