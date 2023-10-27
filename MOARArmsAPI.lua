@@ -152,8 +152,8 @@ local Rot
 ---@param itemPivot ModelPart ModelPart of the Held Item
 ---@param armModel ModelPart | nil ModelPart of the arm itself. Will remove vanilla RightArm and LeftArm parenting from the part if present, to replace with custom anims. nil value means no rotations applied (e.g fully custom anims)
 ---@param itemChoice ItemChoice Item to prioritise. "MAINHAND" and "OFFHAND" for vanilla hands, or a number representing a hotbar slot. (0 is leftmost slot, 8 for rightmost)
----@param animOptions Table Table containing info on which API anims to use. each anim is a key: IDLE,WALK,SWING,ATTACK,USE,DROP,OVERRIDE,OVERRIDE_AIM. Value determines whether to use anim: 0 - anim off, 1 - anim off if custom anim playing, 2 - anim always on
----@param customAnims Table Table containing all custom anims, with play conditions
+---@param animOptions Table Table containing info on which API anims to use. each anim is a key: IDLE,WALK,SWING,ATTACK,USE,DROP,OVERRIDE,OVERRIDE_AIM. Value determines whether to use anim: 0 - anim off, 1 - anim off if custom anim playing, 2 - anim always on, even if custom anims are playing
+---@param customAnims Table Table containing all custom anims. Key determines when to play anim, with same keys as animOptions. All valid anims play at once, use Figura's setPriority() to make some override others when they play.
 function Arm:newArm(id, left_right, itemPivot, armModel, itemChoice, animOptions, customAnims)
     --setup arm vars
     local arm = {ID=id, LeftRight = left_right, ItemPivot = itemPivot, Model = armModel, ItemChoice = itemChoice, AnimOptions = animOptions, CustomAnims = customAnims}
@@ -329,6 +329,7 @@ local OverrideNum = 0 --which pair of arms to override
 local OverrideVal = "NONE" --which arms in the pair to override. can be "NONE","MAINHAND","OFFHAND","BOTH"
 local OverrideisAimed = false --whether animation is 'aimed'
 local OverrideisInverted = false --whether to invert the anim (item is in vanilla right hand but in model's left hand and vice versa)
+local OverrideItem --the item being held/used to trigger the override. Uses the actual held item, not the stripped item used for rendering or the item in the override table. Is nil if no override or override isn't item-related. (swimming)
 local function compareItem(check, item) -- checks whether table 'item' contains everything in table 'check'. use the value "ANY" to indicate that the value can be any non-nil value
     for k, v in pairs(check) do
         if type(v) ~= 'table' then --item in 'check' isnt a table
@@ -345,6 +346,7 @@ local function compareItem(check, item) -- checks whether table 'item' contains 
     return true --if no mismatch found, true.
 end
 local function getOverride()
+    OverrideItem = nil
     OverrideisAimed = false
     OverrideisInverted = player:isLeftHanded()
     if player:getPose() == "SWIMMING" then
@@ -357,6 +359,7 @@ local function getOverride()
     local ActiveItem = player:getActiveItem()
     for _, item in ipairs(ItemOverrides.TwoHandUse) do
         if compareItem(item, ActiveItem) then --active item needs override
+            OverrideItem = ActiveItem
             OverrideVal = "BOTH"
             if ActiveItem == MainhandItem then
                 for _, arm in ipairs(Arms) do
@@ -383,7 +386,7 @@ local function getOverride()
     end
     for _, item in ipairs(ItemOverrides.OneHandUse) do
         if compareItem(item, ActiveItem) then --active item needs override
-            
+            OverrideItem = ActiveItem
             if ActiveItem == MainhandItem then
                 OverrideVal = "MAINHAND"
                 for _, arm in ipairs(Arms) do
@@ -411,6 +414,7 @@ local function getOverride()
     end
     for _, item in ipairs(ItemOverrides.TwoHandHold) do
         if compareItem(item, MainhandItem) then --held item needs override
+            OverrideItem = MainhandItem
             OverrideVal = "BOTH"
             for _, arm in ipairs(Arms) do
                 if arm.ItemSlot == MainhandSlot then
@@ -422,6 +426,7 @@ local function getOverride()
                 end
             end
         elseif compareItem(item, OffhandItem) then
+            OverrideItem = OffhandItem
             OverrideVal = "BOTH"
             for _, arm in ipairs(Arms) do
                 if arm.ItemChoice == "OFFHAND" then
@@ -436,6 +441,7 @@ local function getOverride()
     end
     for _, item in ipairs(ItemOverrides.OneHandHold) do
         if compareItem(item, MainhandItem) then --held item needs override
+            OverrideItem = MainhandItem
             OverrideVal = "MAINHAND"
             for _, arm in ipairs(Arms) do
                 if arm.ItemSlot == MainhandSlot then
@@ -447,6 +453,7 @@ local function getOverride()
                 end
             end
         elseif compareItem(item, OffhandItem) then
+            OverrideItem = OffhandItem
             OverrideVal = "OFFHAND"
             for _, arm in ipairs(Arms) do
                 if arm.ItemChoice == "OFFHAND" then
@@ -462,6 +469,7 @@ local function getOverride()
     OverrideisAimed = true --if a check below passes, item is aimed
     for _, item in ipairs(ItemOverrides.TwoHandUseAimed) do
         if compareItem(item, ActiveItem) then --active item needs override
+            OverrideItem = ActiveItem
             OverrideVal = "BOTH"
             if ActiveItem == MainhandItem then
                 for _, arm in ipairs(Arms) do
@@ -488,7 +496,7 @@ local function getOverride()
     end
     for _, item in ipairs(ItemOverrides.OneHandUseAimed) do
         if compareItem(item, ActiveItem) then --active item needs override
-            
+            OverrideItem = ActiveItem
             if ActiveItem == MainhandItem then
                 OverrideVal = "MAINHAND"
                 for _, arm in ipairs(Arms) do
@@ -516,6 +524,7 @@ local function getOverride()
     end
     for _, item in ipairs(ItemOverrides.TwoHandHoldAimed) do
         if compareItem(item, MainhandItem) then --held item needs override
+            OverrideItem = MainhandItem
             OverrideVal = "BOTH"
             for _, arm in ipairs(Arms) do
                 if arm.ItemSlot == MainhandSlot then
@@ -527,6 +536,7 @@ local function getOverride()
                 end
             end
         elseif compareItem(item, OffhandItem) then
+            OverrideItem = OffhandItem
             OverrideVal = "BOTH"
             for _, arm in ipairs(Arms) do
                 if arm.ItemChoice == "OFFHAND" then
@@ -541,6 +551,7 @@ local function getOverride()
     end
     for _, item in ipairs(ItemOverrides.OneHandHoldAimed) do
         if compareItem(item, MainhandItem) then --held item needs override
+            OverrideItem = MainhandItem
             OverrideVal = "MAINHAND"
             for _, arm in ipairs(Arms) do
                 if arm.ItemSlot == MainhandSlot then
@@ -552,6 +563,7 @@ local function getOverride()
                 end
             end
         elseif compareItem(item, OffhandItem) then
+            OverrideItem = OffhandItem
             OverrideVal = "OFFHAND"
             for _, arm in ipairs(Arms) do
                 if arm.ItemChoice == "OFFHAND" then
@@ -850,6 +862,7 @@ events.RENDER:register(function(delta, mode)
     --Idle swinging
     local idleRotX = (sin(math.rad(world.getTime(delta)*18/5))*3)
     local idleRotZ = (sin(math.rad(world.getTime(delta)*18/4))*3+3)
+    --mixed vars
     local isMounted = player:getVehicle() ~= nil
     local RightArmOriginRot = vanilla_model.RIGHT_ARM:getOriginRot()
     local LeftArmOriginRot = vanilla_model.LEFT_ARM:getOriginRot()
@@ -862,17 +875,15 @@ events.RENDER:register(function(delta, mode)
         OffHandOriginRot = LeftArmOriginRot
         MainHandOriginRot = RightArmOriginRot
     end
+    local isWalking = player:getVelocity().xz:length() > .01
 
     --log(OverrideNum)
     --log(OverrideVal)
     --log(OverrideisAimed)
     --log(OverrideisInverted)
+    log(isWalking)
 
     for _, arm in pairs(Arms) do
-        local ArmRot = vec(0,0,0)
-
-
-        
         
 
         if OverrideVal == "ALL" then --override all arms
@@ -887,111 +898,158 @@ events.RENDER:register(function(delta, mode)
                 arm.isOverridden = true
             end
         end
+
+        local ActiveAnims = {} --animations playing for this arm
         if arm.isOverridden then
-            
-
-            local VanillaRot = {0,0}
-            if arm.LeftRight == "LEFT" then
-                if OverrideisInverted then
-                    VanillaRot = RightArmOriginRot
-                    VanillaRot.y = -VanillaRot.y
-                    if OverrideisAimed then
-                        VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
-                    end
-                else
-                    VanillaRot = LeftArmOriginRot
-                end
-            else
-                if OverrideisInverted then
-                    VanillaRot = LeftArmOriginRot
-                    VanillaRot.y = -VanillaRot.y
-                    if OverrideisAimed then
-                        VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
-                    end
-                else
-                    VanillaRot = RightArmOriginRot
-                end
+            if OverrideisAimed then
+                table.insert(ActiveAnims, "OVERRIDE_AIM")
             end
-
-
-            ArmRot = VanillaRot
-            if isSneaking and arm.Model then --sneaking
-                if arm.Model:getParent():getParentType() == "Body" then --if part is parented to the model's body/torso
-                    ArmRot:add(50)
-                end
-            end
-            
-
+            table.insert(ActiveAnims, "OVERRIDE")
         else
-
+            table.insert(ActiveAnims, "IDLE")
+            log(1)
+            if arm.isSwinging then
+                table.insert(ActiveAnims, "SWING")
+                table.insert(ActiveAnims, arm.SwingType)
+            end
             if arm.ItemSlot == MainhandSlot and OverrideVal ~= "BOTH" and not arm.isSwinging then --Detect arm atk/use swinging
                 
                 if 12 < MainHandOriginRot.y or MainHandOriginRot.y < -12 then
-                    arm.isSwinging = true
+                    table.insert(ActiveAnims, "SWING")
                     if AtkTicker > 0 then arm.SwingType = "ATTACK"
                     elseif UseTicker > 0 then arm.SwingType = "USE"
                     else arm.SwingType = "DROP" end
-                    log(arm.SwingType)
+                    table.insert(ActiveAnims, arm.SwingType)
                 end
             end
-
+            log(arm.isSwinging)
             if arm.ItemChoice == "OFFHAND" and OverrideVal ~= "BOTH" and not arm.isSwinging then
                 if 12 < OffHandOriginRot.y or OffHandOriginRot.y < -12 then
-                    arm.isSwinging = true
+                    table.insert(ActiveAnims, "SWING")
                     if AtkTicker > 0 then arm.SwingType = "ATTACK"
                     elseif UseTicker > 0 then arm.SwingType = "USE"
                     else arm.SwingType = "DROP" end
-                    log(arm.SwingType)
+                    table.insert(ActiveAnims, arm.SwingType)
                 end
             end
+            log(isWalking)
+            if isWalking then table.insert(ActiveAnims, "WALK") end
+        end
+        local suppressedAnims = {} --API anims to disable, if set to be overridden by custom anims
+        local suppressedTier = 0 --used to calc. above
+        for key, anim in pairs(arm.CustomAnims) do --play all custom anims
+            anim:setPlaying(table.contains(ActiveAnims, key))
+            --nothing for override here as it always disables lower
+            if (key == "ATTACK" or key == "USE" or key == "DROP" or key == "SWING") and suppressedTier < 2 then --swings disable idle/walk
+                suppressedTier = 2
+            elseif key == "WALK" and suppressedTier < 1 then --walk disables idle
+                suppressedTier = 1
+            end
+        end
+        if suppressedTier > 0 then
+            suppressedAnims = {"IDLE"}
+        end
+        if suppressedTier > 1 then
+            table.insert(suppressedAnims, "WALK")
+        end
+        local function useVanilla(anim) --should this API (vanilla recreation) anim be used
+            if table.contains(ActiveAnims, anim) then
+                if arm.AnimOptions.anim == 1 and table.contains(suppressedAnims, anim) then
+                    return false
+                else return arm.AnimOptions.anim ~= 0 end
+            end
+            return false
+        end
+        log(ActiveAnims)
+        log(suppressedAnims)
+        --log("")
 
-
-            if isMounted then --riding
-                ArmRot:add(40)
-            else
-                if arm.ID % 2 == 0 then Rot = -walkRot else Rot = walkRot end --walking
-                if arm.Item ~= "minecraft:air" then Rot = Rot * 0.6 end --arms dont swing as far if they're holding an item.
-                if arm.LeftRight == "RIGHT" then
-                    ArmRot:add(-Rot)
-                else
-                    ArmRot:add(Rot)
-                end
-
-                if isSneaking and arm.Model then --sneaking
-                    if arm.Model:getParent():getParentType() == "Body" then --if part is parented to the model's body/torso
-                        ArmRot:add(5)
+        if arm.Model then
+            local ArmRot = vec(0,0,0)
+            local VanillaRot = {0,0}
+            if useVanilla("OVERRIDE") or useVanilla("OVERRIDE_AIM") then --using vanilla rots
+                log("TEST")
+                if arm.LeftRight == "LEFT" then
+                    if OverrideisInverted then
+                        VanillaRot = RightArmOriginRot
+                        VanillaRot.y = -VanillaRot.y
+                        if useVanilla("OVERRIDE_AIM") then
+                            VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
+                        end
                     else
-                        ArmRot:add(-20)
+                        VanillaRot = LeftArmOriginRot
+                    end
+                else
+                    if OverrideisInverted then
+                        VanillaRot = LeftArmOriginRot
+                        VanillaRot.y = -VanillaRot.y
+                        if useVanilla("OVERRIDE_AIM") then
+                            VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
+                        end
+                    else
+                        VanillaRot = RightArmOriginRot
                     end
                 end
-                
-            end
-            if arm.isSwinging then --attacking
 
-                --TBA: make this a separate, customizable func. call
-                if arm.AttackAnim then
-                    arm.AttackAnim:play() --play anim instead of swinging
-                else
+                
+    
+    
+                ArmRot = VanillaRot
+                if isSneaking and arm.Model then --sneaking
+                    if arm.Model:getParent():getParentType() == "Body" then --if part is parented to the model's body/torso
+                        ArmRot:add(50)
+                    end
+                end
+            else
+
+                if useVanilla("SWING") then --Detect arm atk/use swinging
+                    arm.isSwinging = true
                     if arm.LeftRight == "RIGHT" then
                         ArmRot:add(sin((arm.SwingTime+delta)/6*pi)*80, -sin((arm.SwingTime+delta)/3*pi)*20+10, 0)
                     else
                         ArmRot:add(sin((arm.SwingTime+delta)/6*pi)*80, sin((arm.SwingTime+delta)/3*pi)*20-10, 0)
                     end
                 end
+                if useVanilla("WALK") and not isMounted then
+                    if arm.ID % 2 == 0 then Rot = -walkRot else Rot = walkRot end --walking
+                    if arm.Item ~= "minecraft:air" then Rot = Rot * 0.6 end --arms dont swing as far if they're holding an item.
+                    if arm.LeftRight == "RIGHT" then
+                        ArmRot:add(-Rot)
+                    else
+                        ArmRot:add(Rot)
+                    end
+    
+                    
+                end
+                if useVanilla("IDLE") then
+                    if isSneaking and arm.Model then --sneaking
+                        if arm.Model:getParent():getParentType() == "Body" then --if part is parented to the model's body/torso
+                            ArmRot:add(5)
+                        else
+                            ArmRot:add(-20)
+                        end
+                    end
+                    if arm.Item ~= "minecraft:air" then --holding item
+                        ArmRot:add(20,0,0)
+        
+                    end
+                    if arm.ID % 2 == 0 then Rot = -idleRotX else Rot = idleRotX end --Idling
+                    if arm.LeftRight == "RIGHT" then
+                        ArmRot:add(-Rot,0,idleRotZ)
+                    else
+                        ArmRot:add(Rot,0,-idleRotZ)
+                    end
+                    if isMounted then --riding
+                        ArmRot:add(40)
+                    end
+                end
+                
             end
-            if arm.Item ~= "minecraft:air" then --holding item
-                ArmRot:add(20,0,0)
 
-            end
-            if arm.ID % 2 == 0 then Rot = -idleRotX else Rot = idleRotX end --Idling
-            if arm.LeftRight == "RIGHT" then
-                ArmRot:add(-Rot,0,idleRotZ)
-            else
-                ArmRot:add(Rot,0,-idleRotZ)
-            end
+            arm.Model:offsetRot(ArmRot)
+
         end
 
-        if arm.Model then arm.Model:offsetRot(ArmRot) end
         arm.isOverridden = false
     end
 end)
