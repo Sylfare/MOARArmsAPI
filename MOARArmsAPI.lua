@@ -166,7 +166,6 @@ function Arm:newArm(id, left_right, itemPivot, armModel, itemChoice, animOptions
         if not arm.AnimOptions[value] then arm.AnimOptions[value] = hasModel end
     end
     if not arm.CustomAnims then arm.CustomAnims = {} end
-
     if type(itemChoice) == "number" then
         arm.ItemSlot = itemChoice
         table.insert(UsedSlots, itemChoice)
@@ -877,11 +876,7 @@ events.RENDER:register(function(delta, mode)
     end
     local isWalking = player:getVelocity().xz:length() > .01
 
-    --log(OverrideNum)
-    --log(OverrideVal)
-    --log(OverrideisAimed)
-    --log(OverrideisInverted)
-    log(isWalking)
+
 
     for _, arm in pairs(Arms) do
         
@@ -907,7 +902,7 @@ events.RENDER:register(function(delta, mode)
             table.insert(ActiveAnims, "OVERRIDE")
         else
             table.insert(ActiveAnims, "IDLE")
-            log(1)
+
             if arm.isSwinging then
                 table.insert(ActiveAnims, "SWING")
                 table.insert(ActiveAnims, arm.SwingType)
@@ -922,7 +917,7 @@ events.RENDER:register(function(delta, mode)
                     table.insert(ActiveAnims, arm.SwingType)
                 end
             end
-            log(arm.isSwinging)
+
             if arm.ItemChoice == "OFFHAND" and OverrideVal ~= "BOTH" and not arm.isSwinging then
                 if 12 < OffHandOriginRot.y or OffHandOriginRot.y < -12 then
                     table.insert(ActiveAnims, "SWING")
@@ -932,19 +927,23 @@ events.RENDER:register(function(delta, mode)
                     table.insert(ActiveAnims, arm.SwingType)
                 end
             end
-            log(isWalking)
+
             if isWalking then table.insert(ActiveAnims, "WALK") end
         end
         local suppressedAnims = {} --API anims to disable, if set to be overridden by custom anims
         local suppressedTier = 0 --used to calc. above
         for key, anim in pairs(arm.CustomAnims) do --play all custom anims
-            anim:setPlaying(table.contains(ActiveAnims, key))
-            --nothing for override here as it always disables lower
-            if (key == "ATTACK" or key == "USE" or key == "DROP" or key == "SWING") and suppressedTier < 2 then --swings disable idle/walk
-                suppressedTier = 2
-            elseif key == "WALK" and suppressedTier < 1 then --walk disables idle
-                suppressedTier = 1
+            local playAnim = table.contains(ActiveAnims, key)
+            anim:setPlaying(playAnim)
+            if playAnim then
+                --nothing for override here as it always disables lower
+                if (key == "ATTACK" or key == "USE" or key == "DROP" or key == "SWING") and suppressedTier < 2 then --swings disable idle/walk
+                    suppressedTier = 2
+                elseif key == "WALK" and suppressedTier < 1 then --walk disables idle
+                    suppressedTier = 1
+                end
             end
+            
         end
         if suppressedTier > 0 then
             suppressedAnims = {"IDLE"}
@@ -954,21 +953,22 @@ events.RENDER:register(function(delta, mode)
         end
         local function useVanilla(anim) --should this API (vanilla recreation) anim be used
             if table.contains(ActiveAnims, anim) then
-                if arm.AnimOptions.anim == 1 and table.contains(suppressedAnims, anim) then
+                if arm.AnimOptions[anim] == 1 and table.contains(suppressedAnims, anim) then
                     return false
-                else return arm.AnimOptions.anim ~= 0 end
+                else return arm.AnimOptions[anim] ~= 0 end
             end
             return false
         end
-        log(ActiveAnims)
-        log(suppressedAnims)
+        --log(arm.AnimOptions.IDLE ~= 0)
+        --log(useVanilla("IDLE"))
+        --log(suppressedAnims)
         --log("")
 
         if arm.Model then
             local ArmRot = vec(0,0,0)
             local VanillaRot = {0,0}
             if useVanilla("OVERRIDE") or useVanilla("OVERRIDE_AIM") then --using vanilla rots
-                log("TEST")
+
                 if arm.LeftRight == "LEFT" then
                     if OverrideisInverted then
                         VanillaRot = RightArmOriginRot
@@ -995,7 +995,7 @@ events.RENDER:register(function(delta, mode)
     
     
                 ArmRot = VanillaRot
-                if isSneaking and arm.Model then --sneaking
+                if isSneaking then --sneaking
                     if arm.Model:getParent():getParentType() == "Body" then --if part is parented to the model's body/torso
                         ArmRot:add(50)
                     end
@@ -1022,7 +1022,7 @@ events.RENDER:register(function(delta, mode)
                     
                 end
                 if useVanilla("IDLE") then
-                    if isSneaking and arm.Model then --sneaking
+                    if isSneaking then --sneaking
                         if arm.Model:getParent():getParentType() == "Body" then --if part is parented to the model's body/torso
                             ArmRot:add(5)
                         else
