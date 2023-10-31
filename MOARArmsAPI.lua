@@ -10,13 +10,11 @@ FEATURES:
 * Works with items that have custom hold/use poses (bows, cbows, tridents, shields, etc)
   * Modded items that have custom hold/use can be inserted into the ItemOverrides table to work.
 * Arms can be set up to hold specific hotbar slots, alongside mainhand and offhand. The arm holding the mainhand slot won't hold items assigned to other arms, that arm does it instead.
-* Arms can be given an animation to play when they swing
-  * custom anims are still W.I.P, and doesn't properly work with the custom hold/use poses
+* Arm animations can be configured, and custom bbench anims added, per arm
 
 
 to-do (if I can be bothered)
 
- * custom anims for other cases, such as when an item is held
  * proper item-specific use anims for key items, instead of just using vanilla rots
    * find a way to make certain items display like in vanilla when used (things like bow/cbow charging, and trident/spyglass rotating)
  * cleanup/bugfixes where needed
@@ -31,7 +29,7 @@ HOW TO USE
 
 Arm = require("MOARArmsAPI")
 
-then, in the script, define the arms using Arm:NewArm(id, side, item pivot, arm model, held slot, custom anim if any)
+then, in the script, define the arms using Arm:NewArm(id, side, item pivot, arm model, held slot, anim options, custom animations)
 
 Each pair of arms must have a different ID, with the 2 arms in each pair sharing ID values
 the side is either "LEFT" or "RIGHT", depending on which side the arm is on
@@ -39,7 +37,10 @@ item pivot is the part where the item is rendered, just like Left/RightItemPivot
 arm model is the root model of the arm itself
 the held slot is what this arm will hold. If set to "MAINHAND" or "OFFHAND", the arm will generally hold whatever is in your main or off hand.
 the held slot can also be set to a number from 0-8, corresponding to the hotbar slots. The arm will hold whatever item is in that hotbar slot, and when the slot is selected, the mainhand arm will remain holding what it was and this arm will swing when using that item. This allows your avatar to use all their arms.
-the custom anim, if specified, will play a blockbench animation instead of swinging the arm.
+anim options is a table with options for what API anims to use, with keys "IDLE","HOLD","CROUCH","RIDE","WALK","SWING","ATTACK","USE","DROP","OVERRIDE","OVERRIDE_AIM"
+anim option values can be 0,1,2. 0 = off, 1 = off if no higher custom anim playing, 2 = always on
+omitted values default to 1 if there's a arm model, 0 otherwise.
+custom anims are set up like anim options, but the values instead are the animation to play for that key.
 
 e.g. 1, a simple 4 armed character:
 
@@ -48,14 +49,15 @@ Arm:newArm(1, "LEFT", models.model.Body.LeftArm.LeftItem, models.model.Body.Left
 Arm:newArm(2, "RIGHT", models.model.Body.RightArm2.RightItem2, models.model.Body.RightArm2, 0)
 Arm:newArm(2, "LEFT", models.model.Body.LeftArm2.LeftItem2, models.model.Body.LeftArm2, 1)
 
-e.g. 2, a character that uses their tail alongside their hands
+e.g. 2, a character that uses their tail alongside their hands, with only an attack animation
 
 Arm:newArm(1, "RIGHT", models.model.Body.RightArm.RightItem, models.model.Body.RightArm, "MAINHAND")
 Arm:newArm(1, "LEFT", models.model.Body.LeftArm.LeftItem, models.model.Body.LeftArm, "OFFHAND")
-Arm:newArm(2, "RIGHT", models.model.Body.Tail1.Tail2.Tail3.TailItem, nil, 0, animations.model.TailAttack)
+Arm:newArm(2, "RIGHT", models.model.Body.Tail1.Tail2.Tail3.TailItem, nil, 0, {}, {SWING=animations.model.tailAttack}})
 
 
 Arms can also be saved to a variable, allowing access to some of its values, such as the RenderTask for the item, or whether it is currently attacking.
+There are some functions that can be used to manipulate the arms.
 Messing with the variables will likely cause problems
 
 ExtraArm = Arm:newArm(2, "RIGHT", models.model.SecondRightArm.SecondRightItem, models.model.SecondRightArm, 1)
@@ -347,7 +349,7 @@ local OverrideNum = 0 --which pair of arms to override
 local OverrideVal = "NONE" --which arms in the pair to override. can be "NONE","MAINHAND","OFFHAND","BOTH"
 local OverrideisAimed = false --whether animation is 'aimed'
 local OverrideisInverted = false --whether to invert the anim (item is in vanilla right hand but in model's left hand and vice versa)
-local OverrideItem --the item being held/used to trigger the override. Uses the actual held item, not the stripped item used for rendering or the item in the override table. Is nil if no override or override isn't item-related. (swimming)
+local OverrideItem --the item being held/used to trigger the override. Uses the actual held item, not the stripped item used for rendering or the item in the override table. Is nil if no override or override isn't item-related. (swimming) (usage TBA)
 local function compareItem(check, item) -- checks whether table 'item' contains everything in table 'check'. use the value "ANY" to indicate that the value can be any non-nil value
     for k, v in pairs(check) do
         if type(v) ~= 'table' then --item in 'check' isnt a table
@@ -718,6 +720,7 @@ local function tagToStackString(tag, output) --converts a tag value to a string.
 end
 
 local function stripItem(item) -- strip all nbt from "item" that isn't included in "check"
+    if item.id == "minecraft:air" then return "minecraft:air" end --ghost NBT fix
     if next(item.tag) == nil then return item:toStackString() end --item has no tags, no need to strip what doesn't exist 
     output = {}
     _stripItem(NBTWhitelist, item.tag, output)
@@ -801,7 +804,6 @@ events.TICK:register(function()
                 arm.SwingTime = 0
             else
                 arm.SwingTime = arm.SwingTime + 1
-                --TBA: when making customizable attack anim functions, move this there
                 if arm.SwingTime == 6 then
                     arm.SwingTime = 0
                     arm.isSwinging = false
@@ -904,10 +906,9 @@ events.RENDER:register(function(delta, mode)
     local isWalking = player:getVelocity().xz:length() > .01
 
 
-
     for _, arm in pairs(Arms) do
         
-
+        
         if OverrideVal == "ALL" then --override all arms
             arm.isOverridden = true
         elseif OverrideNum == arm.ID then
@@ -929,9 +930,17 @@ events.RENDER:register(function(delta, mode)
             table.insert(ActiveAnims, "OVERRIDE")
         else
             table.insert(ActiveAnims, "IDLE")
-            table.insert(ActiveAnims, "HOLD")
-            table.insert(ActiveAnims, "CROUCH")
-            table.insert(ActiveAnims, "RIDE")
+            if arm.Item ~= "minecraft:air" then --holding item
+                table.insert(ActiveAnims, "HOLD")
+            end
+            
+            if isSneaking then
+                table.insert(ActiveAnims, "CROUCH")
+            end
+            if isMounted then
+                table.insert(ActiveAnims, "RIDE")
+            end
+            
 
             if arm.isSwinging then
                 table.insert(ActiveAnims, "SWING")
@@ -979,7 +988,7 @@ events.RENDER:register(function(delta, mode)
                 
             end
             if suppressedTier > 0 then
-                suppressedAnims = {"IDLE"}
+                suppressedAnims = {"IDLE","HOLD"}
             end
             if suppressedTier > 1 then
                 table.insert(suppressedAnims, "WALK")
@@ -1074,10 +1083,8 @@ events.RENDER:register(function(delta, mode)
                         end
                     end
                     if useVanilla("HOLD") then
-                        if arm.Item ~= "minecraft:air" then --holding item
-                            ArmRot:add(20,0,0)
-            
-                        end
+                        ArmRot:add(20,0,0)
+
                     end
                     if useVanilla("RIDE") then
                         if isMounted then --riding
