@@ -67,23 +67,17 @@ ExtraArm = Arm:newArm(2, "RIGHT", models.model.SecondRightArm.SecondRightItem, m
 --configurable vars. Generally alternative code for if another mod or something breaks the script
 
 --false: uses maths to calculate arm swinging from walking. My math isn't perfect.
---true: uses the vanilla model's leg rotation to calculate arm swinging from walking. Looks better, but will likely break if something messes with vanilla model legs
+--true: uses the vanilla model's leg rotation to calculate arm swinging from walking. Looks better, but will break if something messes with vanilla model legs
 local useLegRotForArmAnim = true
 
 
 
 
-local MainhandVanillaArm = nil
-local OffhandVanillaArm = nil
+
 local isLeftHanded = false
 events.ENTITY_INIT:register(function ()
     if player:isLeftHanded() then
         isLeftHanded = true
-        OffhandVanillaArm = vanilla_model.RIGHT_ARM
-        MainhandVanillaArm = vanilla_model.LEFT_ARM
-    else
-        OffhandVanillaArm = vanilla_model.LEFT_ARM
-        MainhandVanillaArm = vanilla_model.RIGHT_ARM
     end
 end)
 
@@ -104,7 +98,10 @@ end)
 ---@field Item string
 ---@field ItemRender ItemTask
 ---@field newArm function
----@field ChangeItem function
+---@field changeItem function
+---@field setAnimActive function
+---@field setItemActive function
+---@field setActive function
 local Arm = {}
 
 local Arms = {}
@@ -156,8 +153,8 @@ local Rot
 ---@param customAnims Table Table containing all custom anims. Key determines when to play anim, with same keys as animOptions. All valid anims play at once, use Figura's setPriority() to make some override others when they play.
 function Arm:newArm(id, left_right, itemPivot, armModel, itemChoice, animOptions, customAnims)
     --setup arm vars
-    local arm = {ID=id, LeftRight = left_right, ItemPivot = itemPivot, Model = armModel, ItemChoice = itemChoice, AnimOptions = animOptions, CustomAnims = customAnims}
-    local animOptionlist = {"IDLE","WALK","SWING","OVERRIDE"}
+    local arm = {ID=id, LeftRight = left_right, ItemPivot = itemPivot, Model = armModel, ItemChoice = itemChoice, AnimOptions = animOptions, CustomAnims = customAnims, IsAnimActive = true, IsItemActive = true}
+    local animOptionlist = {"IDLE","WALK","SWING","OVERRIDE","HOLD","CROUCH","RIDE"}
     local hasModel
     if armModel then hasModel = 1 else hasModel = 0 end
 
@@ -171,7 +168,7 @@ function Arm:newArm(id, left_right, itemPivot, armModel, itemChoice, animOptions
         table.insert(UsedSlots, itemChoice)
     end
     arm.SwingTime = 0
-
+    arm.Item = "minecraft:air"
     
     table.insert(Arms, arm)
 
@@ -194,11 +191,33 @@ function Arm:newArm(id, left_right, itemPivot, armModel, itemChoice, animOptions
     return arm
 end
 
+---Set whether Arm should animate
+---@param state boolean
+function Arm:setAnimActive(state)
+    self.IsAnimActive = state
+    if (not state) and self.Model then --reset rot if turning off
+        self.Model:offsetRot()
+    end
+end
+
+---Set whether Arm's held item should update. the RenderTask's item can be manipulated by your own script while this is inactive.
+---@param state boolean
+function Arm:setItemActive(state)
+    Arm.IsItemActive = state
+end
+
+---Combines setItemActive and setAnimActive, to enable/disable entire arm
+---@param state boolean
+function Arm:setActive(state)
+    self:setAnimActive(state)
+    self:setItemActive(state)
+end
+
 
 
 ---Change Held Item of an Arm
 ---@param item ItemChoice
-function Arm:ChangeItem(item)
+function Arm:changeItem(item)
     if type(self.ItemChoice) == "number" then
         for index, value in ipairs(UsedSlots) do --if changing from a slot, remove from UsedSlots list
             if value == self.ItemSlot then
@@ -583,11 +602,10 @@ end
 
 -- Strip back excessive item NBT. Don't wanna try to ping stuff like the entire contents of a shulker box
 -- "ANY" means any data there is kept. Any other value will override the value on the item, if it has an existing value
--- this is probably very incomplete
+-- this is likely very incomplete
 -- Most modded items that have a different appearance based on NBT would likely need said NBT added in here to show properly. Some things, like chiseled blocks with chisel mods, likely won't work at all even if listed due to ping size limits
---some modded things might hit ping size limits with these settings, like if an item contains ALL of a contained mob's NBT in it's BlockEntityTag.
+--some modded things might hit ping size limits with these settings, like if an item contains ALL of a contained mob's NBT.
 --This is also used on the host's end for displaying held items. What you see is what others see.
---NOTE: the stripper function is known to fail on complex data.
 --note to self: clean up the stripper code
 local NBTWhitelist = {
     --universal
@@ -616,10 +634,11 @@ local NBTWhitelist = {
     Potion = "ANY",
     CustomPotionColor = "ANY",
 
-    --block entity stuff 
-    -- many modded item's BlockEntityTags seem to break my script for some reason...
-    BlockEntityTag = "ANY",
-
+    
+    --block entity stuff. (be careful when adding modded stuff here, often contains huuge data like full entity NBT data or storage block contents)
+    BlockEntityTag = {
+        Patterns = "ANY"
+    }
 
     --modded
 
@@ -649,7 +668,7 @@ local next = next
 local function tagToStackString(tag, output) --converts a tag value to a string. Like the ItemStack function, but for any table. 
     local comma = false
     if next(tag) == nil then --empty list
-        output[1] = output[1] .. "[],"
+        output[1] = output[1] .. "[]"
     elseif tag[1] then --is a list
         --output[2] = false
         output[1] = output[1] .. "["
@@ -702,7 +721,7 @@ local function stripItem(item) -- strip all nbt from "item" that isn't included 
     if next(item.tag) == nil then return item:toStackString() end --item has no tags, no need to strip what doesn't exist 
     output = {}
     _stripItem(NBTWhitelist, item.tag, output)
-    local stackString = {item:getID(), false} --(Why is an ItemStack's tag read-only? WHYYYYYY) (also this code is jank, and i think might contain unneeded leftovers from previous attempts at it)
+    local stackString = {item:getID(), false} --(Why is an ItemStack's tag read-only? WHYYYYYY) (also this code is jank, and might contain unneeded leftovers from previous attempts at it)
     tagToStackString(output, stackString)
     return stackString[1]
 end
@@ -789,17 +808,25 @@ events.TICK:register(function()
                 end 
             end  
         end
-        if arm.ItemSlot and host:isHost() then
-            local item = stripItem(host:getSlot(arm.ItemSlot))
-            if arm.Item ~= item then
-                pings.updateArm(k, item)
-
+        if arm.IsItemActive then
+            if host:isHost() and arm.ItemChoice ~= "OFFHAND" then
+                local item
+                if arm.ItemSlot then
+                    item = stripItem(host:getSlot(arm.ItemSlot))
+                else    
+                    item = "minecraft:air"
+                end
+                if arm.Item ~= item then
+                    pings.updateArm(k, item)
+    
+                end
+            end
+            if arm.ItemChoice == "OFFHAND" then
+                arm.Item = stripItem(player:getHeldItem(true))
+                 arm.ItemRender:item(arm.Item)
             end
         end
-        if arm.ItemChoice == "OFFHAND" then
-            arm.Item = stripItem(player:getHeldItem(true))
-             arm.ItemRender:item(arm.Item)
-        end
+        
         
     end
 
@@ -902,6 +929,9 @@ events.RENDER:register(function(delta, mode)
             table.insert(ActiveAnims, "OVERRIDE")
         else
             table.insert(ActiveAnims, "IDLE")
+            table.insert(ActiveAnims, "HOLD")
+            table.insert(ActiveAnims, "CROUCH")
+            table.insert(ActiveAnims, "RIDE")
 
             if arm.isSwinging then
                 table.insert(ActiveAnims, "SWING")
@@ -910,6 +940,7 @@ events.RENDER:register(function(delta, mode)
             if arm.ItemSlot == MainhandSlot and OverrideVal ~= "BOTH" and not arm.isSwinging then --Detect arm atk/use swinging
                 
                 if 12 < MainHandOriginRot.y or MainHandOriginRot.y < -12 then
+                    arm.isSwinging = true
                     table.insert(ActiveAnims, "SWING")
                     if AtkTicker > 0 then arm.SwingType = "ATTACK"
                     elseif UseTicker > 0 then arm.SwingType = "USE"
@@ -920,6 +951,7 @@ events.RENDER:register(function(delta, mode)
 
             if arm.ItemChoice == "OFFHAND" and OverrideVal ~= "BOTH" and not arm.isSwinging then
                 if 12 < OffHandOriginRot.y or OffHandOriginRot.y < -12 then
+                    arm.isSwinging = true
                     table.insert(ActiveAnims, "SWING")
                     if AtkTicker > 0 then arm.SwingType = "ATTACK"
                     elseif UseTicker > 0 then arm.SwingType = "USE"
@@ -930,125 +962,136 @@ events.RENDER:register(function(delta, mode)
 
             if isWalking then table.insert(ActiveAnims, "WALK") end
         end
-        local suppressedAnims = {} --API anims to disable, if set to be overridden by custom anims
-        local suppressedTier = 0 --used to calc. above
-        for key, anim in pairs(arm.CustomAnims) do --play all custom anims
-            local playAnim = table.contains(ActiveAnims, key)
-            anim:setPlaying(playAnim)
-            if playAnim then
-                --nothing for override here as it always disables lower
-                if (key == "ATTACK" or key == "USE" or key == "DROP" or key == "SWING") and suppressedTier < 2 then --swings disable idle/walk
-                    suppressedTier = 2
-                elseif key == "WALK" and suppressedTier < 1 then --walk disables idle
-                    suppressedTier = 1
-                end
-            end
-            
-        end
-        if suppressedTier > 0 then
-            suppressedAnims = {"IDLE"}
-        end
-        if suppressedTier > 1 then
-            table.insert(suppressedAnims, "WALK")
-        end
-        local function useVanilla(anim) --should this API (vanilla recreation) anim be used
-            if table.contains(ActiveAnims, anim) then
-                if arm.AnimOptions[anim] == 1 and table.contains(suppressedAnims, anim) then
-                    return false
-                else return arm.AnimOptions[anim] ~= 0 end
-            end
-            return false
-        end
-        --log(arm.AnimOptions.IDLE ~= 0)
-        --log(useVanilla("IDLE"))
-        --log(suppressedAnims)
-        --log("")
-
-        if arm.Model then
-            local ArmRot = vec(0,0,0)
-            local VanillaRot = {0,0}
-            if useVanilla("OVERRIDE") or useVanilla("OVERRIDE_AIM") then --using vanilla rots
-
-                if arm.LeftRight == "LEFT" then
-                    if OverrideisInverted then
-                        VanillaRot = RightArmOriginRot
-                        VanillaRot.y = -VanillaRot.y
-                        if useVanilla("OVERRIDE_AIM") then
-                            VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
-                        end
-                    else
-                        VanillaRot = LeftArmOriginRot
-                    end
-                else
-                    if OverrideisInverted then
-                        VanillaRot = LeftArmOriginRot
-                        VanillaRot.y = -VanillaRot.y
-                        if useVanilla("OVERRIDE_AIM") then
-                            VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
-                        end
-                    else
-                        VanillaRot = RightArmOriginRot
+        if arm.IsAnimActive then
+            local suppressedAnims = {} --API anims to disable, if set to be overridden by custom anims
+            local suppressedTier = 0 --used to calc. above
+            for key, anim in pairs(arm.CustomAnims) do --play all custom anims
+                local playAnim = table.contains(ActiveAnims, key)
+                anim:setPlaying(playAnim)
+                if playAnim then
+                    --nothing for override here as it always disables lower
+                    if (key == "ATTACK" or key == "USE" or key == "DROP" or key == "SWING") and suppressedTier < 2 then --swings disable idle/walk
+                        suppressedTier = 2
+                    elseif key == "WALK" and suppressedTier < 1 then --walk disables idle
+                        suppressedTier = 1
                     end
                 end
-
                 
-    
-    
-                ArmRot = VanillaRot
-                if isSneaking then --sneaking
-                    if arm.Model:getParent():getParentType() == "Body" then --if part is parented to the model's body/torso
-                        ArmRot:add(50)
-                    end
+            end
+            if suppressedTier > 0 then
+                suppressedAnims = {"IDLE"}
+            end
+            if suppressedTier > 1 then
+                table.insert(suppressedAnims, "WALK")
+            end
+            local function useVanilla(anim) --should this API (vanilla recreation) anim be used
+                if table.contains(ActiveAnims, anim) then
+                    if arm.AnimOptions[anim] == 1 and table.contains(suppressedAnims, anim) then
+                        return false
+                    else return arm.AnimOptions[anim] ~= 0 end
                 end
-            else
+                return false
+            end
+            --log(arm.AnimOptions.IDLE ~= 0)
+            --log(useVanilla("IDLE"))
+            --log(suppressedAnims)
+            --log("")
+            if arm.Model then
+                local ArmRot = vec(0,0,0)
+                local VanillaRot = {0,0}
+                if useVanilla("OVERRIDE") or useVanilla("OVERRIDE_AIM") then --using vanilla rots
 
-                if useVanilla("SWING") then --Detect arm atk/use swinging
-                    arm.isSwinging = true
-                    if arm.LeftRight == "RIGHT" then
-                        ArmRot:add(sin((arm.SwingTime+delta)/6*pi)*80, -sin((arm.SwingTime+delta)/3*pi)*20+10, 0)
+                    if arm.LeftRight == "LEFT" then
+                        if OverrideisInverted then
+                            VanillaRot = RightArmOriginRot
+                            VanillaRot.y = -VanillaRot.y
+                            if useVanilla("OVERRIDE_AIM") then
+                                VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
+                            end
+                        else
+                            VanillaRot = LeftArmOriginRot
+                        end
                     else
-                        ArmRot:add(sin((arm.SwingTime+delta)/6*pi)*80, sin((arm.SwingTime+delta)/3*pi)*20-10, 0)
+                        if OverrideisInverted then
+                            VanillaRot = LeftArmOriginRot
+                            VanillaRot.y = -VanillaRot.y
+                            if useVanilla("OVERRIDE_AIM") then
+                                VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
+                            end
+                        else
+                            VanillaRot = RightArmOriginRot
+                        end
                     end
-                end
-                if useVanilla("WALK") and not isMounted then
-                    if arm.ID % 2 == 0 then Rot = -walkRot else Rot = walkRot end --walking
-                    if arm.Item ~= "minecraft:air" then Rot = Rot * 0.6 end --arms dont swing as far if they're holding an item.
-                    if arm.LeftRight == "RIGHT" then
-                        ArmRot:add(-Rot)
-                    else
-                        ArmRot:add(Rot)
-                    end
-    
+
                     
-                end
-                if useVanilla("IDLE") then
+        
+        
+                    ArmRot = VanillaRot
                     if isSneaking then --sneaking
                         if arm.Model:getParent():getParentType() == "Body" then --if part is parented to the model's body/torso
-                            ArmRot:add(5)
-                        else
-                            ArmRot:add(-20)
+                            ArmRot:add(50)
                         end
                     end
-                    if arm.Item ~= "minecraft:air" then --holding item
-                        ArmRot:add(20,0,0)
+                else
+
+                    if useVanilla("SWING") then --Detect arm atk/use swinging
+                        arm.isSwinging = true
+                        if arm.LeftRight == "RIGHT" then
+                            ArmRot:add(sin((arm.SwingTime+delta)/6*pi)*80, -sin((arm.SwingTime+delta)/3*pi)*20+10, 0)
+                        else
+                            ArmRot:add(sin((arm.SwingTime+delta)/6*pi)*80, sin((arm.SwingTime+delta)/3*pi)*20-10, 0)
+                        end
+                    end
+                    if useVanilla("WALK") and not isMounted then
+                        if arm.ID % 2 == 0 then Rot = -walkRot else Rot = walkRot end --walking
+                        if arm.Item ~= "minecraft:air" then Rot = Rot * 0.6 end --arms dont swing as far if they're holding an item.
+                        if arm.LeftRight == "RIGHT" then
+                            ArmRot:add(-Rot)
+                        else
+                            ArmRot:add(Rot)
+                        end
         
+                        
                     end
-                    if arm.ID % 2 == 0 then Rot = -idleRotX else Rot = idleRotX end --Idling
-                    if arm.LeftRight == "RIGHT" then
-                        ArmRot:add(-Rot,0,idleRotZ)
-                    else
-                        ArmRot:add(Rot,0,-idleRotZ)
+                    if useVanilla("IDLE") then
+                        
+                        
+                        if arm.ID % 2 == 0 then Rot = -idleRotX else Rot = idleRotX end --Idling
+                        if arm.LeftRight == "RIGHT" then
+                            ArmRot:add(-Rot,0,idleRotZ)
+                        else
+                            ArmRot:add(Rot,0,-idleRotZ)
+                        end
+                        
                     end
-                    if isMounted then --riding
-                        ArmRot:add(40)
+                    if useVanilla("SNEAK") then
+                        if isSneaking then --sneaking
+                            if arm.Model:getParent():getParentType() == "Body" then --if part is parented to the model's body/torso
+                                ArmRot:add(5)
+                            else
+                                ArmRot:add(-20)
+                            end
+                        end
                     end
+                    if useVanilla("HOLD") then
+                        if arm.Item ~= "minecraft:air" then --holding item
+                            ArmRot:add(20,0,0)
+            
+                        end
+                    end
+                    if useVanilla("RIDE") then
+                        if isMounted then --riding
+                            ArmRot:add(40)
+                        end
+                    end
+                    
                 end
-                
+
+                arm.Model:offsetRot(ArmRot)
+
             end
-
-            arm.Model:offsetRot(ArmRot)
-
         end
+        
 
         arm.isOverridden = false
     end
