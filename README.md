@@ -14,7 +14,7 @@ at the top of the script, put a require for this stored as a variable, like this
 
     Arm = require("MOARArmsAPI")
 
-then, in the script, define the arms using `Arm:NewArm(id, side, item pivot, arm model, held slot, custom anim if any)`
+then, in the script, define the arms using `Arm:NewArm(id, side, item pivot, arm model, held slot, anim options, custom animations)`
 
 * Each pair of arms must have a different ID, with the 2 arms in each pair sharing ID values.
 * the side is either "LEFT" or "RIGHT", depending on which side the arm is on.
@@ -22,7 +22,10 @@ then, in the script, define the arms using `Arm:NewArm(id, side, item pivot, arm
 * arm model is the root model of the arm itself.
 * the held slot is what this arm will hold. If set to "MAINHAND" or "OFFHAND", the arm will generally hold whatever is in your main or off hand.
 * the held slot can also be set to a number from 0-8, corresponding to the hotbar slots. The arm will hold whatever item is in that hotbar slot, and when the slot is selected, the mainhand arm will remain holding what it was and this arm will swing when using that item. This allows your avatar to use all their arms.
-* the custom anim, if specified, will play a blockbench animation instead of swinging the arm. \(currently very WIP\)
+* anim options is a table with options for what API anims to use, with keys "IDLE","HOLD","CROUCH","RIDE","WALK","SWING","ATTACK","USE","DROP","OVERRIDE","OVERRIDE_AIM"
+anim option values can be 0,1,2. 0 = off, 1 = off if no higher custom anim playing, 2 = always on
+omitted values default to 1 if there's an arm model, 0 otherwise.
+* custom anims are set up like anim options, but the values instead are the animation to play for that key.
 
 e.g. 1, a simple 4 armed character:
 
@@ -35,9 +38,10 @@ e.g. 2, a character that uses their tail alongside their hands
 
     Arm:newArm(1, "RIGHT", models.model.Body.RightArm.RightItem, models.model.Body.RightArm, "MAINHAND")
     Arm:newArm(1, "LEFT", models.model.Body.LeftArm.LeftItem, models.model.Body.LeftArm, "OFFHAND")
-    Arm:newArm(2, "RIGHT", models.model.Body.Tail1.Tail2.Tail3.TailItem, nil, 0, animations.model.TailAttack)
+    Arm:newArm(2, "RIGHT", models.model.Body.Tail1.Tail2.Tail3.TailItem, nil, 0, {}, {SWING=animations.model.tailAttack}})
 
 Arms can also be saved to a variable, allowing access to some of its values, such as the RenderTask for the item, or whether it is currently attacking.
+There are some functions that can be used to manipulate the arms.
 Messing with the variables will likely cause problems
 
     ExtraArm = Arm:newArm(2, "RIGHT", models.model.SecondRightArm.SecondRightItem, models.model.SecondRightArm, 1)
@@ -45,3 +49,20 @@ Messing with the variables will likely cause problems
 The table storing all the arms can also be accessed as a second variable returned by the script, done like so:
 
     Arm, ArmTable = require("MOARArmsAPI")
+
+### Arm functions
+
+These functions are run off of a specific arm instance, not the main script obtained with `require()`
+
+    Arm:setAnimActive(state)
+
+Sets whether this Arm should animate at all. Also stops custom anims.
+
+    Arm:setItemActive(state)
+
+Sets whether the item held by this Arm should be used. Currently does not free up the held slot, acting as if the item was hidden.
+Your own script can manipulate the displayed item in the RenderTask while this is disabled.
+
+    Arm:setActive(state)
+
+Combines `Arm:setAnimActive(state)` and `Arm:setItemActive(state)` into a single function call.

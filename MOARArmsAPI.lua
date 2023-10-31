@@ -206,6 +206,9 @@ end
 ---@param state boolean
 function Arm:setItemActive(state)
     Arm.IsItemActive = state
+    if not state then
+        arm.Item = "minecraft:air"
+    end
 end
 
 ---Combines setItemActive and setAnimActive, to enable/disable entire arm
