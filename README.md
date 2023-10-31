@@ -14,18 +14,19 @@ at the top of the script, put a require for this stored as a variable, like this
 
     Arm = require("MOARArmsAPI")
 
-then, in the script, define the arms using `Arm:NewArm(id, side, item pivot, arm model, held slot, anim options, custom animations)`
+then, in the script, define the arms using `Arm:NewArm(ID, Side, Item Pivot, Arm Model, Held Slot, Anim Options, Custom Animations)`
 
-* Each pair of arms must have a different ID, with the 2 arms in each pair sharing ID values.
-* the side is either "LEFT" or "RIGHT", depending on which side the arm is on.
-* item pivot is the part where the item is rendered, just like Left/RightItemPivot parent types.
-* arm model is the root model of the arm itself.
-* the held slot is what this arm will hold. If set to "MAINHAND" or "OFFHAND", the arm will generally hold whatever is in your main or off hand.
-* the held slot can also be set to a number from 0-8, corresponding to the hotbar slots. The arm will hold whatever item is in that hotbar slot, and when the slot is selected, the mainhand arm will remain holding what it was and this arm will swing when using that item. This allows your avatar to use all their arms.
-* anim options is a table with options for what API anims to use, with keys "IDLE","HOLD","CROUCH","RIDE",  "WALK","SWING","ATTACK","USE","DROP","OVERRIDE","OVERRIDE_AIM"  
-anim option values can be 0,1,2. 0 = off, 1 = off if no higher custom anim playing, 2 = always on  
+* ID: Each pair of arms must have a different ID, with the 2 arms in each pair sharing ID values.
+* Side: either "LEFT" or "RIGHT", depending on which side the arm is on.
+* Item Pivot: the ModelPart where the item is rendered, just like Figura's Left/RightItemPivot parent types.
+* Arm Model: the root model of the arm itself.
+* Held Slot: What slot this arm will hold. If set to "MAINHAND" or "OFFHAND", the arm will generally hold whatever is in your main or off hand.  
+the held slot can also be set to a number from 0-8, corresponding to the hotbar slots from left to right. The arm will hold whatever item is in that hotbar slot, and when the slot is selected, the mainhand arm will remain holding what it was and this arm will swing when using that item. This allows your avatar to use all their arms.
+* Anim Options: a table with options for what API anims to use, with keys "IDLE","HOLD","CROUCH","RIDE",  "WALK","SWING", and "OVERRIDE". OVERRIDE refers to animations like the shield and spyglass, that don't use a simple swing.  
+anim option values can be 0, 1, or 2. 0 = off, 1 = off if no higher custom anim playing, 2 = always on  
 omitted values default to 1 if there's an arm model, 0 otherwise.
-* custom anims are set up like anim options, but the values instead are the animation to play for that key.
+* Custom Animations: A table like Anim Options, but the values instead are the custom animations you want to play.  
+Has extra keys: "ATTACK", "USE", "DROP", and "OVERRIDE_AIM". OVERRIDE_AIM is for animations like the bow, that are pointed at a target.
 
 e.g. 1, a simple 4 armed character:
 

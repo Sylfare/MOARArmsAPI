@@ -1011,13 +1011,13 @@ events.RENDER:register(function(delta, mode)
             if arm.Model then
                 local ArmRot = vec(0,0,0)
                 local VanillaRot = {0,0}
-                if useVanilla("OVERRIDE") or useVanilla("OVERRIDE_AIM") then --using vanilla rots
+                if useVanilla("OVERRIDE") then --using vanilla rots
 
                     if arm.LeftRight == "LEFT" then
                         if OverrideisInverted then
                             VanillaRot = RightArmOriginRot
                             VanillaRot.y = -VanillaRot.y
-                            if useVanilla("OVERRIDE_AIM") then
+                            if OverrideisAimed then
                                 VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
                             end
                         else
@@ -1027,7 +1027,7 @@ events.RENDER:register(function(delta, mode)
                         if OverrideisInverted then
                             VanillaRot = LeftArmOriginRot
                             VanillaRot.y = -VanillaRot.y
-                            if useVanilla("OVERRIDE_AIM") then
+                            if OverrideisAimed then
                                 VanillaRot.y = VanillaRot.y + 2 * vanilla_model.HEAD:getOriginRot().y
                             end
                         else
