@@ -12,7 +12,7 @@ Arm = require("MOARArmsAPI")
 
 Arm:newArm(1, "LEFT", models.model.Body.LeftArm.bone19, models.model.Body.LeftArm, "OFFHAND")
 Arm:newArm(1, "RIGHT", models.model.Body.RightArm.bone20, models.model.Body.RightArm, "MAINHAND")
-CustomArm = Arm:newArm(2, "RIGHT", models.model.Body.bone.bone2.bone11.bone12.bone14.RightItemPivot, nil, 0, animations.model.attack)
+CustomArm = Arm:newArm(2, "RIGHT", models.model.Body.bone.bone2.bone11.bone12.bone14.RightItemPivot, nil, 0, {}, {SWING=animations.model.attack})
 
 --fixing sneak pose
 headOffset = vec(0,4.25,0)
