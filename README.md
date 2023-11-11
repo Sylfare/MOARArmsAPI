@@ -14,7 +14,7 @@ At the top of the script, put a require for this stored as a variable, like this
 
     Arm = require("MOARArmsAPI")
 
-Then, in the script, define the arms using `Arm:NewArm(ID, Side, Item Pivot, Arm Model, Held Slot, Anim Options, Custom Animations)`
+Then, in the script, define the arms using `Arm:newArm(ID, Side, Item Pivot, Arm Model, Held Slot, Anim Options, Custom Animations)`
 
 * ID: Each pair of arms must have a different ID, with the 2 arms in each pair sharing ID values.
 * Side: Either "LEFT" or "RIGHT", depending on which side the arm is on.

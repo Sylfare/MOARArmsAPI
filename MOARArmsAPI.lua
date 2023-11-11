@@ -29,7 +29,7 @@ HOW TO USE
 
 Arm = require("MOARArmsAPI")
 
-then, in the script, define the arms using Arm:NewArm(id, side, item pivot, arm model, held slot, anim options, custom animations)
+then, in the script, define the arms using Arm:newArm(id, side, item pivot, arm model, held slot, anim options, custom animations)
 
 Each pair of arms must have a different ID, with the 2 arms in each pair sharing ID values
 the side is either "LEFT" or "RIGHT", depending on which side the arm is on
