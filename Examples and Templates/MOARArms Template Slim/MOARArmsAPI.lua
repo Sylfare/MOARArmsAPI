@@ -205,9 +205,10 @@ end
 ---Set whether Arm's held item should update. the RenderTask's item can be manipulated by your own script while this is inactive.
 ---@param state boolean
 function Arm:setItemActive(state)
-    Arm.IsItemActive = state
+    self.IsItemActive = state
     if not state then
-        arm.Item = "minecraft:air"
+        self.Item = "minecraft:air"
+        self.ItemRender:item("minecraft:air")
     end
 end
 
