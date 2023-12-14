@@ -131,6 +131,7 @@ local MainhandSlot = 0
 local UsedSlots = {}
 local isSneaking = false
 local Rot
+local MainHandArmSlot = -1 --current held item slot for mainhand arm
 
 
 
@@ -243,6 +244,8 @@ function Arm:changeItem(item)
 
         self.ItemSlot = item
         table.insert(UsedSlots, item)
+    elseif item == "MAINHAND" then
+        self.ItemSlot = MainHandArmSlot
     else
         self.ItemSlot = nil
     end
@@ -776,6 +779,7 @@ events.TICK:register(function()
     end
 
     if not table.contains(UsedSlots, MainhandSlot) then
+        MainHandArmSlot = MainhandSlot
         for _, arm in ipairs(Arms) do
             if arm.ItemChoice == "MAINHAND" then
                 arm.ItemSlot = MainhandSlot
