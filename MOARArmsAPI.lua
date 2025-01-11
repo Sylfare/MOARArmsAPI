@@ -624,10 +624,10 @@ local NBTWhitelist = {
     Display = "ANY",
 
     --tools
-    Enchantments = {
-        "ANY" --only ping first ench, should allow texture packs that differentiate between ench. books to work
-    },
-    Damage = "ANY",
+    -- Enchantments = {
+    --     "ANY" --only ping first ench, should allow texture packs that differentiate between ench. books to work
+    -- },
+    -- Damage = "ANY",
 
     --head
     SkullOwner = "ANY",
@@ -649,6 +649,10 @@ local NBTWhitelist = {
     --block entity stuff. (be careful when adding modded stuff here, often contains huuge data like full entity NBT data or storage block contents)
     BlockEntityTag = {
         Patterns = "ANY"
+    },
+
+    ["minecraft:enchantments"] = {
+        levels = "ANYQUOTES" 
     }
 
     --modded
@@ -656,30 +660,41 @@ local NBTWhitelist = {
 }
 
 
-local function _stripItem(check, item, output)
+local function _stripItem(check, item, output, addQuotes)
     for k, v in pairs(check) do
-        if type(v) ~= 'table' then --item in 'check' isnt a table
-            if item[k] ~= nil then
-                if v == "ANY" then
-                    output[k] = item[k]
+        
+        if item[k] ~= nil then
+            if type(v) ~= 'table' then --item in 'check' isnt a table
+                if item[k] ~= nil then
+                    if v == "ANY" then
+                        output[k] = item[k]
+                    elseif v == "ANYQUOTES" then
+                        local list = {}
+                        for index, value in pairs(item[k]) do
+                            list['"'..index..'"'] = value
+                        end
+                        
+                        output[k] = list
+                    end
                 end
+    
+            elseif type(item[k]) ~= 'table' then --'check' has table, 'item' doesnt
+            else
+                output[k] = {}
+                quotes = k == "levels"                
+                _stripItem(v, item[k], output[k], quotes) --recursive call on the table within table
             end
-
-        elseif type(item[k]) ~= 'table' then --'check' has table, 'item' doesnt
-            --item[k] = nil
-        else
-            output[k] = {}
-            _stripItem(v, item[k], output[k]) --recursive call on the table within table
         end
+        
     end
     
 end
 
 local next = next
-local function tagToStackString(tag, output) --converts a tag value to a string. Like the ItemStack function, but for any table. 
+local function tagToStackString(tag, output, first) --converts a tag value to a string. Like the ItemStack function, but for any table. 
     local comma = false
     if next(tag) == nil then --empty list
-        output[1] = output[1] .. "[]"
+        output[1] = output[1] .. "{}"
     elseif tag[1] then --is a list
         --output[2] = false
         output[1] = output[1] .. "["
@@ -704,15 +719,23 @@ local function tagToStackString(tag, output) --converts a tag value to a string.
         end
         output[1] = output[1] .. "]"
     else
+        if first then
+            output[1] = output[1] .. "["
+        else
+            output[1] = output[1] .. "{"
+        end
         
-        output[1] = output[1] .. "{"
         for k, v in pairs(tag) do
             if comma then
                 output[1] = output[1] .. ","
             end
             comma = true
             output[1] = output[1] .. k
-            output[1] = output[1] .. ":"
+            if first then
+                output[1] = output[1] .. "="
+            else
+                output[1] = output[1] .. ":"
+            end
             if type(v) == "table" then
                 tagToStackString(v, output)
             elseif type(v) == "string" then
@@ -723,7 +746,11 @@ local function tagToStackString(tag, output) --converts a tag value to a string.
                 output[1] = output[1] .. v
             end
         end
-        output[1] = output[1] .. "}"
+        if first then
+            output[1] = output[1] .. "]"
+        else
+            output[1] = output[1] .. "}"
+        end
     end
     
 end
@@ -734,7 +761,7 @@ local function stripItem(item) -- strip all nbt from "item" that isn't included 
     output = {}
     _stripItem(NBTWhitelist, item.tag, output)
     local stackString = {item:getID(), false} --(Why is an ItemStack's tag read-only? WHYYYYYY) (also this code is jank, and might contain unneeded leftovers from previous attempts at it)
-    tagToStackString(output, stackString)
+    tagToStackString(output, stackString, true)
     return stackString[1]
 end
 
