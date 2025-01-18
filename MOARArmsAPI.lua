@@ -282,8 +282,9 @@ local update_ping = function() pings.getArmData() end
 events.TICK:register(function()
     if host:isHost() then
         
-        for player_name in pairs(world.getPlayers()) do
-            if not list[player_name] then
+        for player_name, player_data in pairs(world.getPlayers()) do
+            -- no need to send data to players who doesn't have avatar,  
+            if not list[player_name] and player_data:hasAvatar() then
               send_update_ping = true
             end
             list[player_name] = 2
@@ -324,9 +325,9 @@ local ItemOverrides = {
         {id = "minecraft:shield"},
     },
     TwoHandUse = {--Vanilla rot when being used, for arm holding item and matching opposite arm
-        {id = "minecraft:crossbow"},
+        {id = "minecraft:crossbow", tag = {["minecraft:charged_projectiles"] = nil}},
         --modded
-        {id = "rosia:purple_steel_rifle"},
+        {id = "rosia:purple_steel_rifle", tag = {["minecraft:charged_projectiles"] = nil}},
     },
 
     --If item is aimed, like bows, cbows, guns, as well as things like spyglasses and goat horns, put in here.
@@ -335,11 +336,11 @@ local ItemOverrides = {
 
     },
     TwoHandHoldAimed = {--Vanilla rot when held, for arm holding item and matching opposite arm
-        {id = "minecraft:crossbow", tag = {Charged = 1}},
+        {id = "minecraft:crossbow", tag = {["minecraft:charged_projectiles"] = "ANY"}},
         --modded
         {id = "create:potato_cannon"},
         {id = "create:handheld_worldshaper"},
-        {id = "rosia:purple_steel_rifle", tag = {Charged = 1}}
+        {id = "rosia:purple_steel_rifle", tag = {["minecraft:charged_projectiles"] = "ANY"}}
     },
     OneHandUseAimed = {--Vanilla rot when being used, for arm holding item
         {id = "minecraft:goat_horn"},
@@ -620,39 +621,30 @@ end
 --note to self: clean up the stripper code
 local NBTWhitelist = {
     --universal
-    CustomModelData = "ANY",
-    Display = "ANY",
+    -- ["minecraft:item_model"] = "ANY",
 
     --tools
-    -- Enchantments = {
-    --     "ANY" --only ping first ench, should allow texture packs that differentiate between ench. books to work
-    -- },
-    -- Damage = "ANY",
 
     --head
-    SkullOwner = "ANY",
+
 
     --crossbow
-    Charged = "ANY",
-    ChargedProjectiles = {
-        {
-            id = "ANY",
-            Count = "ANY",
-        }
-    },
-
+    
     --potions
-    Potion = "ANY",
-    CustomPotionColor = "ANY",
-
+    ["minecraft:potion_contents"] = {
+        custom_color = "ANY",
+        potion = "ANY"
+    },
+    
     
     --block entity stuff. (be careful when adding modded stuff here, often contains huuge data like full entity NBT data or storage block contents)
-    BlockEntityTag = {
-        Patterns = "ANY"
+    ["minecraft:dyed_color"] = "ANY",
+    ["minecraft:trim"] = "ANY",
+    ["minecraft:profile"] = {
+        name = "ANY",
     },
-
     ["minecraft:enchantments"] = {
-        levels = "ANYQUOTES" 
+        levels = "ANYQUOTES"
     }
 
     --modded
@@ -660,7 +652,8 @@ local NBTWhitelist = {
 }
 
 
-local function _stripItem(check, item, output, addQuotes)
+
+local function _stripItem(check, item, output)
     for k, v in pairs(check) do
         
         if item[k] ~= nil then
@@ -670,19 +663,23 @@ local function _stripItem(check, item, output, addQuotes)
                         output[k] = item[k]
                     elseif v == "ANYQUOTES" then
                         local list = {}
-                        for index, value in pairs(item[k]) do
-                            list['"'..index..'"'] = value
+                        if not(isEmptyTable(item[k])) then
+                            for index, value in pairs(item[k]) do
+                                list['"'..index..'"'] = value
+                            end
+                            output[k] = list
                         end
-                        
-                        output[k] = list
                     end
                 end
     
             elseif type(item[k]) ~= 'table' then --'check' has table, 'item' doesnt
             else
                 output[k] = {}
-                quotes = k == "levels"                
-                _stripItem(v, item[k], output[k], quotes) --recursive call on the table within table
+                _stripItem(v, item[k], output[k]) --recursive call on the table within table
+
+                if k == "minecraft:enchantments" and isEmptyTable(output[k]) then
+                    output[k] = nil
+                end
             end
         end
         
@@ -691,68 +688,17 @@ local function _stripItem(check, item, output, addQuotes)
 end
 
 local next = next
-local function tagToStackString(tag, output, first) --converts a tag value to a string. Like the ItemStack function, but for any table. 
+local function tagToStackString(tag, output) --converts a tag value to a string. Like the ItemStack function, but for any table.
     local comma = false
-    if next(tag) == nil then --empty list
-        output[1] = output[1] .. "{}"
-    elseif tag[1] then --is a list
-        --output[2] = false
-        output[1] = output[1] .. "["
-        for k, v in ipairs(tag) do
-            if comma then
-                output[1] = output[1] .. ","
-            end
-            comma = true
-            if type(v) == "table" then
-                if next(v) == nil then
-                    output[1] = output[1] .. "{}"
-                else
-                    tagToStackString(v, output)
-                end
-            elseif type(v) == "string" then
-                output[1] = output[1] .. "'"
-                output[1] = output[1] .. v
-                output[1] = output[1] .. "'"
-            else
-                output[1] = output[1] .. v
-            end
+    output[1] = output[1] .. "["    
+    for k, v in pairs(tag) do
+        if comma then
+            output[1] = output[1] .. ","
         end
-        output[1] = output[1] .. "]"
-    else
-        if first then
-            output[1] = output[1] .. "["
-        else
-            output[1] = output[1] .. "{"
-        end
-        
-        for k, v in pairs(tag) do
-            if comma then
-                output[1] = output[1] .. ","
-            end
-            comma = true
-            output[1] = output[1] .. k
-            if first then
-                output[1] = output[1] .. "="
-            else
-                output[1] = output[1] .. ":"
-            end
-            if type(v) == "table" then
-                tagToStackString(v, output)
-            elseif type(v) == "string" then
-                output[1] = output[1] .. "'"
-                output[1] = output[1] .. v
-                output[1] = output[1] .. "'"
-            else
-                output[1] = output[1] .. v
-            end
-        end
-        if first then
-            output[1] = output[1] .. "]"
-        else
-            output[1] = output[1] .. "}"
-        end
+        output[1] = output[1] .. k .. "=".. toJson(v):gsub('{"([^\\].-)"','{%1'):gsub(',"([^\\].-)"',',%1'):gsub('{"\\(".-)\\"','{%1'):gsub(',"\\(.-)\\"',',%1')
+        comma = true
     end
-    
+    output[1] = output[1] .. "]"
 end
 
 local function stripItem(item) -- strip all nbt from "item" that isn't included in "check"
@@ -801,7 +747,7 @@ events.TICK:register(function()
     
 
     --Main hand arm item. Item doesn't change when selecting a slot held in another arm
-    if host:isHost() then 
+    if host:isHost() then
         if MainhandSlot ~= player:getNbt().SelectedItemSlot then
             pings.mainHandSlot(player:getNbt().SelectedItemSlot)
         end
@@ -892,7 +838,6 @@ events.RENDER:register(function(delta, mode)
     for _, arm in pairs(Arms) do
         if (arm.ItemChoice == "MAINHAND" or arm.ItemChoice == "OFFHAND") and arm.Model then
             if mode == "FIRST_PERSON" then
-                
                 if arm.LeftRight == "LEFT" then
                     arm.Model:setParentType("LeftArm")
                 else
@@ -1139,9 +1084,16 @@ events.RENDER:register(function(delta, mode)
 
         arm.isOverridden = false
     end
+
+    
 end)
 
 
-
+function isEmptyTable(t)
+    for _ in pairs(t) do
+        return false
+    end
+    return true
+end
 
 return Arm, Arms
